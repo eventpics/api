@@ -1,0 +1,196 @@
+openapi: 3.1.0
+info:
+  title: EventPics API
+  version: 1.0.0
+  description: |
+    API for uploading photos to EventPics albums programmatically.
+
+    Flow:
+    1) GET events and albums (`GET /geteventsandalbums`, Header‑Auth)
+    2) POST `getuploadurl` (`POST /getuploadurl`, body contains `apiKey` and file details)
+    3) PUT to the pre-signed `uploadUrl` (Cloudflare R2, no extra auth headers)
+servers:
+  - url: https://api.event.pics
+    description: Production
+tags:
+  - name: Events
+    description: List events and albums
+  - name: Upload
+    description: Request upload URL and upload directly to Cloudflare R2
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    XApiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    Album:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Album ID
+        title:
+          type: string
+          description: Display title
+      required: [id, title]
+    Event:
+      type: object
+      properties:
+        title:
+          type: string
+        linkId:
+          type: string
+          description: Public link identifier of the event
+        albums:
+          type: array
+          items:
+            $ref: '#/components/schemas/Album'
+      required: [title, linkId]
+    GetEventsAndAlbumsResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+      required: [events]
+      example:
+        events:
+          - title: Summer Party
+            linkId: abcd1234
+            albums:
+              - id: a1
+                title: Photo booth
+              - id: a2
+                title: Backstage
+    GetUploadUrlRequest:
+      type: object
+      properties:
+        apiKey:
+          type: string
+        linkId:
+          type: string
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+          format: int64
+          description: Optional file size in bytes. Maximum file size is 95 MB.
+        takenAt:
+          type: integer
+          format: int64
+          description: Unix timestamp in milliseconds
+        albumId:
+          type: string
+          description: Optional target album
+      required: [apiKey, linkId, fileName]
+      example:
+        apiKey: YOUR_API_KEY
+        linkId: abcd1234
+        fileName: photo.jpg
+        takenAt: 1736700000000
+        albumId: a1
+    GetUploadUrlResponse:
+      type: object
+      properties:
+        uploadUrl:
+          type: string
+          format: uri
+          description: Pre‑signed Cloudflare R2 URL (valid for 30 minutes / 1800s)
+        mediaUrl:
+          type: string
+          format: uri
+          description: >-
+            Page showing this one photo or video, for people. Short enough for a
+            QR code, so a guest can scan it and see their own picture. Lives under
+            /m/ so the mobile apps leave it to the browser. Works once the PUT has
+            succeeded.
+        downloadUrl:
+          type: string
+          format: uri
+          description: >-
+            The file itself on the media CDN, for programs. Cached and served
+            without going through the API. Works once the PUT has succeeded.
+      required: [uploadUrl, mediaUrl, downloadUrl]
+      example:
+        uploadUrl: https://media.event.pics/62988d1d9fa03ef8f86597c3bbd93ba3c5c4e325d83ea440901c803fec89dfc6/1789071990000o?X-Amz-Algorithm=AWS4-HMAC-SHA256&...
+        mediaUrl: https://event.pics/m/ye8Itau4wi6Vbj1DydRiWw08q7v4
+        downloadUrl: https://media.event.pics/62988d1d9fa03ef8f86597c3bbd93ba3c5c4e325d83ea440901c803fec89dfc6/1789071999558o
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          nullable: true
+      required: [code, message]
+paths:
+  /geteventsandalbums:
+    get:
+      tags: [Events]
+      summary: List events and albums
+      description: Lists all events for the API key including albums.
+      security:
+        - bearerAuth: []
+        - XApiKeyHeader: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetEventsAndAlbumsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 'Invalid API key. Body: {"error": "Invalid API Key."}'
+        '429':
+          description: Too Many Requests
+        '500':
+          description: Server error
+  /getuploadurl:
+    post:
+      tags: [Upload]
+      summary: Request upload URL
+      description: |
+        Creates a pre‑signed `uploadUrl` for the upload (PUT). Maximum file size: 95 MB.
+        Note: The URL is valid for 30 minutes (1800s) and the `Content-Type` used in the PUT must match the signature.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetUploadUrlRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetUploadUrlResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too Many Requests
+        '500':
+          description: Server error
