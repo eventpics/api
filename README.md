@@ -39,4 +39,4 @@ python3 examples/upload.py --event abcd1234 photo1.jpg photo2.jpg
 
 ## Support
 
-support@event.pics. The examples are licensed under the MIT License, see [LICENSE](LICENSE).
+Open an issue in this repository. The examples are licensed under the MIT License, see [LICENSE](LICENSE).
